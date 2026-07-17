@@ -1,0 +1,64 @@
+services:
+  mineru-api:
+    image: mineru:latest
+    container_name: mineru-api
+    restart: always
+    profiles: ["api"]
+    ports:
+      - 8000:8000
+    environment:
+      MINERU_MODEL_SOURCE: local
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    entrypoint: mineru-api
+    command:
+      --host 0.0.0.0
+      --port 8000
+      --allow-public-http-client
+      --gpu-memory-utilization 0.05
+      --max-model-len 4096
+      --enforce-eager
+    volumes:
+      - /home/szssyyy/models/mineru:/models
+      - /home/szssyyy/mineru-deployment/mineru.json:/root/mineru.json
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - bridge
+      - mineru-deployment_default
+      - private-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mineru-gradio:
+    image: mineru:latest
+    container_name: mineru-gradio
+    restart: always
+    profiles: ["gradio"]
+    ports:
+      - 7860:7860
+    environment:
+      MINERU_MODEL_SOURCE: local
+    entrypoint: mineru-gradio
+    command:
+      --server-name 0.0.0.0
+      --server-port 7860
+      --api-url http://mineru-api:8000
+    volumes:
+      - /home/szssyyy/models/mineru:/models
+      - /home/szssyyy/mineru-deployment/mineru.json:/root/mineru.json
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>用户管理 - 文档智析</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fa;color:#1a1d23;max-width:900px;margin:0 auto;padding:20px}
+h1{font-size:1.4rem;margin-bottom:20px;color:#07c160}
+.toolbar{display:flex;gap:12px;margin-bottom:16px}
+.btn{padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;transition:all .15s}
+.btn-green{background:#07c160;color:#fff}
+.btn-green:hover{background:#06ad56}
+.btn-outline{background:#fff;color:#07c160;border:1px solid #07c160}
+.btn-outline:hover{background:#f0fff4}
+.btn-red{background:#e74c3c;color:#fff}
+.btn-red:hover{background:#c0392b}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+th,td{padding:12px 16px;text-align:left;font-size:14px}
+th{background:#f8f9fa;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb}
+td{border-bottom:1px solid #f0f0f0}
+td .ops{display:flex;gap:6px}
+td .ops button{font-size:12px;padding:4px 10px;border:1px solid #d1d5db;border-radius:4px;background:#fff;cursor:pointer;color:#374151;transition:all .1s}
+td .ops button:hover{background:#f3f4f6;border-color:#9ca3af}
+td .ops button.danger{color:#e74c3c;border-color:#fecaca}
+td .ops button.danger:hover{background:#fef2f2}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal-box{background:#fff;border-radius:12px;padding:28px;width:380px;max-width:90vw;box-shadow:0 8px 30px rgba(0,0,0,.15)}
+.modal-box h2{font-size:1.1rem;margin-bottom:20px}
+.modal-box label{display:block;font-size:13px;color:#6b7280;margin-bottom:4px;margin-top:14px}
+.modal-box input{width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;outline:none}
+.modal-box input:focus{border-color:#07c160}
+.modal-actions{display:flex;gap:10px;margin-top:24px;justify-content:flex-end}
+.msg{display:none;padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:14px}
+.msg.ok{display:block;background:#f0fff4;color:#07c160;border:1px solid #b7ebc7}
+.msg.err{display:block;background:#fff0f0;color:#e74c3c;border:1px solid #fecaca}
+.loading{text-align:center;padding:40px;color:#9ca3af}
+.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.nav a{color:#6b7280;text-decoration:none;font-size:14px}
+.nav a:hover{color:#07c160}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <h1>用户管理</h1>
+  <a href="/">← 返回对话</a>
+</div>
+
+<div class="msg" id="msg"></div>
+
+<div class="toolbar">
+  <button class="btn btn-green" onclick="showNew()">+ 新建用户</button>
+</div>
+
+<table>
+  <thead><tr><th>用户名</th><th>昵称</th><th>创建时间</th><th>操作</th></tr></thead>
+  <tbody id="ulist"><tr><td colspan="4" class="loading">加载中...</td></tr></tbody>
+</table>
+
+<div class="modal" id="modNew">
+  <div class="modal-box">
+    <h2>新建用户</h2>
+    <label>用户名</label><input id="nuser" placeholder="登录用户名">
+    <label>密码</label><input id="npwd" type="password" placeholder="密码">
+    <label>昵称</label><input id="nname" placeholder="显示名称（可不填）">
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeMod('modNew')">取消</button>
+      <button class="btn btn-green" onclick="doNew()">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modPwd">
+  <div class="modal-box">
+    <h2>修改密码</h2>
+    <p style="font-size:14px;color:#6b7280;margin-bottom:16px">用户: <strong id="pusername"></strong></p>
+    <label>新密码</label><input id="ppwd" type="password" placeholder="新密码">
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeMod('modPwd')">取消</button>
+      <button class="btn btn-green" onclick="doPwd()">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var A='/api',T=localStorage.getItem('mt'),U=null,uidToPwd='';
+
+async function init(){
+  if(!T){location.href='/';return}
+  var r=await fetch(A+'/me',{headers:{'Authorization':'Bearer '+T}});
+  if(!r.ok){location.href='/';return}
+  U=await r.json();
+  if(U.username!=='admin'){document.body.innerHTML='<div style="text-align:center;padding:60px;color:#e74c3c">仅管理员可访问</div>';return}
+  loadUsers();
+}
+
+async function loadUsers(){
+  try{
+    var r=await fetch(A+'/admin/users',{headers:{'Authorization':'Bearer '+T}});
+    var users=await r.json();
+    document.getElementById('ulist').innerHTML=users.map(function(u){
+      var t=new Date(u.created_at*1000).toLocaleDateString('zh-CN');
+      return'<tr><td>'+esc(u.username)+'</td><td>'+esc(u.display_name||u.username)+'</td><td>'+t+'</td><td class="ops"><button onclick="showPwd(\''+u.id+'\',\''+esc(u.username)+'\')">改密</button><button class="danger" onclick="doDel(\''+u.id+'\',\''+esc(u.username)+'\')">删除</button></td></tr>';
+    }).join('');
+  }catch(e){showMsg('加载失败: '+e.message,'err')}
+}
+
+function showMsg(m,c){var e=document.getElementById('msg');e.textContent=m;e.className='msg '+c;setTimeout(function(){e.className='msg'},3000)}
+
+function showMod(id){document.getElementById(id).classList.add('show')}
+function closeMod(id){document.getElementById(id).classList.remove('show')}
+
+function showNew(){document.getElementById('nuser').value='';document.getElementById('npwd').value='';document.getElementById('nname').value='';showMod('modNew')}
+
+async function doNew(){
+  var u=document.getElementById('nuser').value.trim(),p=document.getElementById('npwd').value,d=document.getElementById('nname').value.trim();
+  if(!u||!p){showMsg('用户名和密码不能为空','err');return}
+  try{
+    var r=await fetch(A+'/admin/users',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify({username:u,password:p,display_name:d})});
+    if(!r.ok){var e=await r.json();showMsg(e.detail||'创建失败','err');return}
+    closeMod('modNew');showMsg('用户 '+u+' 创建成功','ok');loadUsers()
+  }catch(e){showMsg(e.message,'err')}
+}
+
+function showPwd(uid,uname){uidToPwd=uid;document.getElementById('pusername').textContent=uname;document.getElementById('ppwd').value='';showMod('modPwd')}
+
+async function doPwd(){
+  var p=document.getElementById('ppwd').value;if(!p){showMsg('密码不能为空','err');return}
+  try{
+    var r=await fetch(A+'/admin/users/'+uidToPwd+'/pwd',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+T},body:JSON.stringify({password:p})});
+    if(!r.ok){showMsg('修改失败','err');return}
+    closeMod('modPwd');showMsg('密码已修改','ok')
+  }catch(e){showMsg(e.message,'err')}
+}
+
+async function doDel(uid,uname){
+  if(!confirm('确定删除用户 '+uname+'？'))return;
+  try{
+    var r=await fetch(A+'/admin/users/'+uid,{method:'DELETE',headers:{'Authorization':'Bearer '+T}});
+    if(!r.ok){showMsg('删除失败','err');return}
+    showMsg('用户 '+uname+' 已删除','ok');loadUsers()
+  }catch(e){showMsg(e.message,'err')}
+}
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+data/
+*.db
+.env
+mineru.json
+__pycache__/
+*.pyc
